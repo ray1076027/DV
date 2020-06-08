@@ -4,6 +4,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
+import time
 
 class HMAC:
     def __init__(self,msg):
@@ -76,29 +77,62 @@ class DS:
         )
         return self.signature
 
-    def verify(self, signature):
-        self.signature = signature
-        self.vrfy = self.pk.verify(
-            self.signature,
-            self.msg,
+    def verify(self, msg, signature, vk):
+        self.sig = signature
+        self.m = msg
+        self.vk = vk
+        self.vrfy = self.vk.verify(
+            self.sig,
+            self.m,
             padding.PSS(
                 mgf = padding.MGF1(hashes.SHA256()),
                 salt_length = padding.PSS.MAX_LENGTH
             ),
             hashes.SHA256()
         )
-        return self.vrfy
+        try:
+            if self.vrfy == None:
+                return "valid"
+        except:
+            return "invalid"
+
+class CRH:
+    def __init__(self,m):
+        self.msg = bytes(m, encoding='utf-8')
+        self.sha256hash = hashlib.sha256(self.msg).digest()
+
+    def hashvalue(self):
+        return self.sha256hash
 
 if __name__ == '__main__':
-    msg = 'hellow'
+    stime = time.time()
+    msg = 'hellow'*100000000
+    macstime = time.time()
     tag,mac_key = HMAC(msg).mac()
+    macetime = time.time()
+    macrtime = macetime - macstime
+    mac_key_str = str(mac_key)
+    pkestime = time.time()
     pke = PKE(mac_key.hex())
-    ciphertext = pke.encrypt()
-    plaintext = pke.decrypt(ciphertext)
-    #print(mac_key.hex() == plaintext)#check plaintext
-    #print(tag)
-    ds = DS(msg)
+    ciphertext = pke.encrypt() #將mac_key丟進public key encryption
+    pkeetime = time.time()
+    pkertime = pkeetime - pkestime
+    print("c:", ciphertext.hex())
+    plaintext = pke.decrypt(ciphertext) #plaintext == mac_key
+    print("decryption check:",mac_key.hex() == plaintext)#check plaintext
+    print("tag:",tag)
+    hashstime = time.time()
+    hash = CRH(mac_key_str).hashvalue()
+    hashetime = time.time()
+    hashrtime = hashetime - hashstime
+    print("hash value:",hash.hex())
+    dsstime = time.time()
+    ds = DS(hash.hex())
     sigma = ds.sign()
-    vrfy = ds.verify(sigma)
-    print(sigma.hex())
-    print(vrfy)
+    dsetime = time.time()
+    dsrtime = dsetime - dsstime
+    vrfy = ds.verify(ds.msg, sigma, ds.pk)
+    print("signatue:", sigma.hex())
+    print("signature valid or not:", vrfy)
+    etime = time.time()
+    print(f'run time: {etime - stime}, mac time: {macrtime}, pke time: {pkertime}, hash time: {hashrtime}, ds time: {dsrtime}')
